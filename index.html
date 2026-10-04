@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Convertisseur Fichiers → IA</title>
+
+<!-- Librairies de conversion (100% navigateur, hors ligne, rien n'est envoyé sur internet) -->
+<script src="lib/pdf.min.js"></script>
+<script src="lib/mammoth.browser.min.js"></script>
+<script src="lib/xlsx.full.min.js"></script>
+<script src="lib/jszip.min.js"></script>
+<script src="lib/turndown.js"></script>
+
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1d212b; --border:#2a2f3a;
+    --text:#e6e9ef; --muted:#8b93a7; --accent:#5b8cff; --accent2:#36c98e;
+    --danger:#ff6b6b; --drop:#202637;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh;
+  }
+  header{
+    padding:22px 28px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  }
+  header h1{font-size:20px; margin:0; font-weight:650}
+  header .sub{color:var(--muted); font-size:13px}
+  .badge{
+    margin-left:auto; font-size:12px; color:var(--accent2);
+    border:1px solid rgba(54,201,142,.4); padding:5px 10px; border-radius:20px;
+    background:rgba(54,201,142,.08);
+  }
+  main{
+    display:grid; grid-template-columns:1fr 1fr; gap:18px;
+    padding:22px 28px; max-width:1400px; margin:0 auto;
+  }
+  @media (max-width:820px){ main{grid-template-columns:1fr} }
+  .col{
+    background:var(--panel); border:1px solid var(--border); border-radius:14px;
+    padding:18px; display:flex; flex-direction:column; min-height:480px;
+  }
+  .col h2{font-size:14px; text-transform:uppercase; letter-spacing:.08em;
+    color:var(--muted); margin:0 0 14px}
+  .dropzone{
+    flex:0 0 auto; border:2px dashed var(--border); border-radius:12px;
+    padding:34px 18px; text-align:center; cursor:pointer; transition:.15s;
+    background:var(--drop); color:var(--muted);
+  }
+  .dropzone:hover,.dropzone.over{border-color:var(--accent); color:var(--text);
+    background:#243049}
+  .dropzone strong{color:var(--text)}
+  .dropzone .big{font-size:40px; line-height:1; margin-bottom:8px}
+  .hint{font-size:12px; color:var(--muted); margin-top:10px; line-height:1.5}
+  .list{margin-top:14px; display:flex; flex-direction:column; gap:8px; overflow:auto}
+  .item{
+    background:var(--panel2); border:1px solid var(--border); border-radius:10px;
+    padding:10px 12px; display:flex; align-items:center; gap:10px;
+  }
+  .item .ico{font-size:20px}
+  .item .meta{flex:1; min-width:0}
+  .item .name{font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .item .info{font-size:11px; color:var(--muted); margin-top:2px}
+  .item .act{display:flex; gap:6px; align-items:center}
+  .status{font-size:11px; padding:3px 8px; border-radius:20px; white-space:nowrap}
+  .st-wait{background:#33384a; color:var(--muted)}
+  .st-work{background:rgba(91,140,255,.15); color:var(--accent)}
+  .st-done{background:rgba(54,201,142,.15); color:var(--accent2)}
+  .st-err{background:rgba(255,107,107,.15); color:var(--danger)}
+  button{
+    font-family:inherit; cursor:pointer; border:none; border-radius:8px;
+    padding:7px 12px; font-size:12.5px; font-weight:600; transition:.12s;
+  }
+  .btn-dl{background:var(--accent); color:#fff}
+  .btn-dl:hover{filter:brightness(1.1)}
+  .btn-ghost{background:transparent; color:var(--muted); border:1px solid var(--border)}
+  .btn-ghost:hover{color:var(--text); border-color:var(--accent)}
+  .btn-x{background:transparent;color:var(--muted);padding:4px 8px}
+  .btn-x:hover{color:var(--danger)}
+  .toolbar{display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap}
+  .empty{color:var(--muted); font-size:13px; text-align:center; margin:auto 0; padding:30px}
+  .savings{
+    font-size:12px; color:var(--accent2); background:rgba(54,201,142,.07);
+    border:1px solid rgba(54,201,142,.25); border-radius:8px; padding:6px 10px;
+    margin-top:6px; display:inline-block;
+  }
+  .preview{
+    margin-top:8px; background:#0c0e13; border:1px solid var(--border);
+    border-radius:8px; padding:10px; font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:11.5px; color:#c7ccd8; white-space:pre-wrap; max-height:160px;
+    overflow:auto; display:none;
+  }
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:16px}
+  a{color:var(--accent)}
+  .tip{font-size:12px; color:var(--text); background:rgba(91,140,255,.08);
+    border:1px solid rgba(91,140,255,.3); border-radius:8px; padding:8px 11px; margin-bottom:12px; line-height:1.5}
+  .toast{position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px);
+    background:var(--accent2); color:#04231a; font-weight:700; font-size:13px;
+    padding:10px 18px; border-radius:24px; opacity:0; pointer-events:none;
+    transition:.25s; z-index:99; box-shadow:0 6px 20px rgba(0,0,0,.35)}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+  .btn-copy{background:rgba(54,201,142,.15); color:var(--accent2); border:1px solid rgba(54,201,142,.35)}
+  .btn-copy:hover{background:rgba(54,201,142,.25)}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🪶 Convertisseur Fichiers → IA</h1>
+    <div class="sub">Transforme tes documents au format le plus léger et lisible pour Claude & autres IA</div>
+  </div>
+  <div class="badge">🔒 100% privé · rien n'est envoyé sur internet</div>
+</header>
+
+<main>
+  <!-- GAUCHE : on dépose -->
+  <section class="col">
+    <h2>1 · Dépose tes fichiers ici</h2>
+    <div class="dropzone" id="drop">
+      <div class="big">📥</div>
+      <strong>Glisse-dépose</strong> tes fichiers ici<br>ou clique pour parcourir
+      <div class="hint">
+        PDF · Word (.docx) · Excel (.xlsx/.xls) · CSV · PowerPoint (.pptx)<br>
+        HTML · RTF · JSON · texte… tout ce qui est lourd à lire pour une IA
+      </div>
+    </div>
+    <input type="file" id="file" multiple hidden>
+    <div class="list" id="srcList"></div>
+  </section>
+
+  <!-- DROITE : résultats -->
+  <section class="col">
+    <h2>2 · Prêt pour l'IA — donne ça à Claude</h2>
+    <div class="toolbar">
+      <button class="btn-dl" id="copyAll" disabled>📋 Copier tout pour Claude</button>
+      <button class="btn-ghost" id="dlTxt" disabled>📄 1 fichier .txt</button>
+      <button class="btn-ghost" id="dlZip" disabled title="Archive de secours — Claude ne lit PAS les .zip">💾 .zip</button>
+      <button class="btn-ghost" id="clear" disabled>Vider</button>
+    </div>
+    <div class="tip" id="tip">
+      ✅ Meilleure méthode : <strong>Copier tout pour Claude</strong> puis coller dans le chat.
+      Ou le <strong>fichier .txt</strong>. ⚠️ Claude ne sait pas ouvrir les <strong>.zip</strong>.
+    </div>
+    <div class="list" id="outList">
+      <div class="empty" id="emptyOut">Les versions converties apparaîtront ici.<br>Ensuite : <strong>Copier tout pour Claude</strong> et colle dans le chat.</div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<footer>
+  Sortie en <strong>Markdown</strong> — le plus économique en tokens (≈ 4 caractères = 1 token).<br>
+  Pour donner ça à une IA : <strong>Copier pour Claude</strong> (le mieux) ou le fichier <strong>.txt</strong>.
+  Une IA ne sait pas ouvrir un <strong>.zip</strong> — c'est pour ça qu'il apparaissait « vide ».
+</footer>
+
+<script>
+// pdf.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = "lib/pdf.worker.min.js";
+
+const turndown = new TurndownService({ headingStyle:"atx", codeBlockStyle:"fenced", bulletListMarker:"-" });
+
+const dropEl = document.getElementById("drop");
+const fileEl = document.getElementById("file");
+const srcList = document.getElementById("srcList");
+const outList = document.getElementById("outList");
+const emptyOut = document.getElementById("emptyOut");
+const copyAllBtn = document.getElementById("copyAll");
+const dlTxtBtn = document.getElementById("dlTxt");
+const dlZipBtn = document.getElementById("dlZip");
+const clearBtn = document.getElementById("clear");
+const toastEl = document.getElementById("toast");
+
+let counter = 0;
+const results = []; // {name, md}
+
+// ---- estimation tokens (approx) ----
+const estTokens = (txt) => Math.ceil((txt || "").length / 4);
+const fmtTok = (n) => n >= 1000 ? (n/1000).toFixed(1)+"k" : n;
+const fmtSize = (b) => b < 1024 ? b+" o" : b < 1048576 ? (b/1024).toFixed(0)+" Ko" : (b/1048576).toFixed(1)+" Mo";
+
+const ICONS = {pdf:"📕",docx:"📘",doc:"📘",xlsx:"📗",xls:"📗",csv:"📊",pptx:"📙",ppt:"📙",
+  html:"🌐",htm:"🌐",rtf:"📄",json:"🧩",txt:"📄",md:"📝",default:"📄"};
+const extOf = (n) => (n.split(".").pop() || "").toLowerCase();
+const baseOf = (n) => n.replace(/\.[^.]+$/, "");
+
+// ---- gestion drag & drop ----
+["dragenter","dragover"].forEach(e =>
+  dropEl.addEventListener(e, ev => { ev.preventDefault(); dropEl.classList.add("over"); }));
+["dragleave","drop"].forEach(e =>
+  dropEl.addEventListener(e, ev => { ev.preventDefault(); dropEl.classList.remove("over"); }));
+dropEl.addEventListener("drop", ev => handleFiles(ev.dataTransfer.files));
+dropEl.addEventListener("click", () => fileEl.click());
+fileEl.addEventListener("change", () => handleFiles(fileEl.files));
+
+clearBtn.addEventListener("click", () => {
+  srcList.innerHTML = ""; outList.innerHTML = "";
+  outList.appendChild(emptyOut); emptyOut.style.display = "";
+  results.length = 0; updateToolbar();
+});
+copyAllBtn.addEventListener("click", copyAll);
+dlTxtBtn.addEventListener("click", downloadCombined);
+dlZipBtn.addEventListener("click", downloadZip);
+
+function updateToolbar(){
+  const has = results.length > 0;
+  copyAllBtn.disabled = !has; dlTxtBtn.disabled = !has; dlZipBtn.disabled = !has;
+  clearBtn.disabled = !has && srcList.children.length === 0;
+}
+
+let toastTimer = null;
+function toast(msg){
+  toastEl.textContent = msg; toastEl.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1800);
+}
+
+// Assemble tout le contenu converti en un seul texte clair pour l'IA
+function buildCombined(){
+  return results.map(r =>
+    `===== ${r.name} =====\n\n${r.md}`
+  ).join("\n\n\n");
+}
+
+async function copyAll(){
+  const text = buildCombined();
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // repli si clipboard bloqué (ex: fichier ouvert en local sans https)
+    const ta = document.createElement("textarea");
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand("copy"); document.body.removeChild(ta);
+  }
+  toast(`✓ Copié (${results.length} fichier${results.length>1?"s":""}) — colle dans Claude`);
+}
+
+function downloadCombined(){
+  downloadOne("fichiers-pour-IA.txt", buildCombined(), "text/plain");
+}
+
+function handleFiles(fileListLike){
+  const files = Array.from(fileListLike);
+  files.forEach(file => processFile(file));
+  fileEl.value = "";
+}
+
+// ---- carte fichier source ----
+function makeSourceCard(file){
+  const ext = extOf(file.name);
+  const row = document.createElement("div");
+  row.className = "item";
+  row.innerHTML = `
+    <div class="ico">${ICONS[ext] || ICONS.default}</div>
+    <div class="meta">
+      <div class="name" title="${file.name}">${file.name}</div>
+      <div class="info">${fmtSize(file.size)} · ${ext.toUpperCase()}</div>
+    </div>
+    <div class="act"><span class="status st-wait">en attente</span></div>`;
+  srcList.appendChild(row);
+  return row.querySelector(".status");
+}
+
+async function processFile(file){
+  const statusEl = makeSourceCard(file);
+  const ext = extOf(file.name);
+  statusEl.className = "status st-work"; statusEl.textContent = "conversion…";
+  try {
+    let md = await convert(file, ext);
+    // garde-fou : jamais de fichier vide envoyé à l'IA
+    if (!md || !md.trim()){
+      md = `> ⚠️ Aucun texte n'a pu être extrait de « ${file.name} ».\n> `+
+           `Le fichier est peut-être scanné (image), protégé ou vide.\n> `+
+           `S'il s'agit d'un scan/photo, donne l'image directement à Claude : il lit les images.`;
+    }
+    statusEl.className = "status st-done"; statusEl.textContent = "✓ converti";
+    addResult(file, md);
+  } catch (err){
+    console.error(err);
+    statusEl.className = "status st-err"; statusEl.textContent = "✗ erreur";
+    statusEl.title = err.message || String(err);
+  }
+  updateToolbar();
+}
+
+// ====== CONVERSIONS ======
+async function convert(file, ext){
+  switch(ext){
+    case "pdf":  return await pdfToMd(file);
+    case "docx": return await docxToMd(file);
+    case "xlsx":
+    case "xls":  return await sheetToMd(file, false);
+    case "csv":  return await sheetToMd(file, true);
+    case "pptx": return await pptxToMd(file);
+    case "html":
+    case "htm":  return htmlToMd(await file.text());
+    case "json": return jsonToMd(await file.text(), file.name);
+    case "rtf":  return rtfToMd(await file.text());
+    case "svg":  return "```svg\n" + (await file.text()).trim() + "\n```";
+    case "png": case "jpg": case "jpeg": case "webp":
+    case "gif": case "bmp": case "tif": case "tiff":
+      return `> 🖼️ « ${file.name} » est une image.\n> `+
+             `Pas besoin de la convertir : **Claude lit les images directement**.\n> `+
+             `Glisse simplement l'image dans le chat de Claude.`;
+    case "txt":
+    case "md":
+    case "":     return await file.text();
+    default:     return await file.text(); // fallback : on tente en texte brut
+  }
+}
+
+async function pdfToMd(file){
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+  let out = [];
+  for (let p = 1; p <= pdf.numPages; p++){
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    let lastY = null, line = "";
+    const lines = [];
+    content.items.forEach(it => {
+      const y = it.transform[5];
+      if (lastY !== null && Math.abs(y - lastY) > 2){ lines.push(line.trim()); line = ""; }
+      line += it.str + (it.hasEOL ? "" : " ");
+      lastY = y;
+    });
+    if (line.trim()) lines.push(line.trim());
+    const text = lines.join("\n").replace(/\n{3,}/g,"\n\n").trim();
+    out.push(`<!-- Page ${p} -->\n\n${text}`);
+  }
+  return out.join("\n\n---\n\n").trim() || "*(Aucun texte détecté — PDF probablement scanné/image.)*";
+}
+
+async function docxToMd(file){
+  const buf = await file.arrayBuffer();
+  const { value:html } = await mammoth.convertToHtml({arrayBuffer:buf});
+  return htmlToMd(html);
+}
+
+async function sheetToMd(file, isCsv){
+  const data = isCsv ? await file.text() : await file.arrayBuffer();
+  const wb = isCsv ? XLSX.read(data, {type:"string"}) : XLSX.read(data, {type:"array"});
+  let out = [];
+  wb.SheetNames.forEach(name => {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, blankrows:false});
+    if (!rows.length) return;
+    if (wb.SheetNames.length > 1) out.push(`## ${name}`);
+    const md = rows.map((r,i) => {
+      const cells = (r.length ? r : [""]).map(c => String(c ?? "").replace(/\|/g,"\\|"));
+      let line = "| " + cells.join(" | ") + " |";
+      if (i === 0) line += "\n| " + cells.map(() => "---").join(" | ") + " |";
+      return line;
+    }).join("\n");
+    out.push(md);
+  });
+  return out.join("\n\n").trim();
+}
+
+async function pptxToMd(file){
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const slideFiles = Object.keys(zip.files)
+    .filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n))
+    .sort((a,b) => (a.match(/\d+/)[0]-b.match(/\d+/)[0]));
+  let out = [];
+  for (let i = 0; i < slideFiles.length; i++){
+    const xml = await zip.files[slideFiles[i]].async("string");
+    const texts = [...xml.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map(m =>
+      m[1].replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"'));
+    const body = texts.join("\n").trim();
+    out.push(`## Diapositive ${i+1}\n\n${body || "*(vide)*"}`);
+  }
+  return out.join("\n\n").trim();
+}
+
+function htmlToMd(html){
+  return turndown.turndown(html).replace(/\n{3,}/g,"\n\n").trim();
+}
+
+function jsonToMd(text, name){
+  try { return "```json\n" + JSON.stringify(JSON.parse(text), null, 2) + "\n```"; }
+  catch { return "```\n" + text + "\n```"; }
+}
+
+function rtfToMd(rtf){
+  // déstrip basique du RTF -> texte
+  return rtf
+    .replace(/\\par[d]?/g,"\n").replace(/\\tab/g,"\t")
+    .replace(/\{\\[^{}]+\}/g,"").replace(/\\[a-z]+-?\d* ?/gi,"")
+    .replace(/[{}]/g,"").replace(/\n{3,}/g,"\n\n").trim();
+}
+
+// ---- carte résultat ----
+function addResult(file, md){
+  emptyOut.style.display = "none";
+  const outName = baseOf(file.name) + ".md";
+  results.push({name:outName, md});
+
+  const before = file.size;                 // octets d'origine
+  const after = new Blob([md]).size;         // octets markdown
+  const tok = estTokens(md);
+  const saved = before > 0 ? Math.max(0, Math.round((1 - after/before) * 100)) : 0;
+
+  const row = document.createElement("div");
+  row.className = "item";
+  row.style.flexDirection = "column"; row.style.alignItems = "stretch";
+  row.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;width:100%">
+      <div class="ico">📝</div>
+      <div class="meta">
+        <div class="name" title="${outName}">${outName}</div>
+        <div class="info">≈ ${fmtTok(tok)} tokens · ${fmtSize(after)}</div>
+      </div>
+      <div class="act">
+        <button class="btn-copy btn-cp" title="Copier ce texte">📋</button>
+        <button class="btn-ghost btn-prev" title="Aperçu">👁</button>
+        <button class="btn-dl btn-dl1" title="Télécharger .md">⬇</button>
+      </div>
+    </div>
+    ${saved > 0 ? `<span class="savings">≈ ${saved}% plus léger que l'original pour l'IA</span>` : ""}
+    <pre class="preview">${escapeHtml(md.slice(0,4000))}${md.length>4000?"\n…":""}</pre>`;
+  outList.appendChild(row);
+
+  row.querySelector(".btn-dl1").addEventListener("click", () => downloadOne(outName, md));
+  row.querySelector(".btn-cp").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(md); }
+    catch { const ta=document.createElement("textarea"); ta.value=md; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); }
+    toast("✓ Copié — colle dans Claude");
+  });
+  const prev = row.querySelector(".preview");
+  row.querySelector(".btn-prev").addEventListener("click", () =>
+    prev.style.display = prev.style.display === "block" ? "none" : "block");
+}
+
+function escapeHtml(s){
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function downloadOne(name, text, mime){
+  const blob = new Blob([text], {type:(mime||"text/markdown")+";charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function downloadZip(){
+  const zip = new JSZip();
+  results.forEach(r => zip.file(r.name, r.md));
+  const blob = await zip.generateAsync({type:"blob"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "fichiers-ia.zip"; a.click();
+  URL.revokeObjectURL(a.href);
+}
+</script>
+</body>
+</html>
